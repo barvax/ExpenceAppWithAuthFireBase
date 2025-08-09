@@ -3,239 +3,266 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Simple Expenses — Firebase + Google Sheets</title>
+  <title>Expenses App — Auth Wrapper</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Optional: your app might use Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body class="bg-gray-50 min-h-screen text-gray-800">
+  <!-- Sign-in gate -->
   <section id="signinView" class="min-h-screen grid place-items-center">
     <div class="bg-white rounded-2xl shadow p-6 text-center">
-      <h1 class="text-xl font-bold mb-1">Simple Expenses</h1>
+      <h1 class="text-xl font-bold mb-1">Expenses</h1>
       <p class="text-sm text-gray-600 mb-4">Sign in with Google to continue</p>
       <button id="btnGoogle" class="px-4 py-2 rounded-lg bg-black text-white text-sm">Sign in with Google</button>
+      <p id="signinMsg" class="text-xs text-gray-500 mt-3"></p>
     </div>
   </section>
-  <div id="app" class="max-w-2xl mx-auto p-4 hidden">
-    <header class="flex items-center justify-between">
-      <h1 class="text-2xl font-bold">Simple Expenses</h1>
-      <div class="flex items-center gap-2">
-        <span id="whoami" class="text-sm text-gray-600"></span>
-        <button id="btnLogout" class="px-3 py-1.5 rounded-lg bg-gray-200 text-sm hidden">Sign out</button>
-      </div>
-    </header>
 
-    <section class="mt-6 p-4 bg-white rounded-2xl shadow">
-      <h2 class="font-semibold mb-3">Add expense</h2>
-      <form id="expenseForm" class="grid grid-cols-1 md:grid-cols-4 gap-3">
-        <input id="date" type="date" class="border rounded-lg p-2" required />
-        <input id="category" type="text" placeholder="Category" class="border rounded-lg p-2" required />
-        <input id="amount" type="number" step="0.01" placeholder="Amount" class="border rounded-lg p-2" required />
-        <input id="note" type="text" placeholder="Note" class="border rounded-lg p-2" />
-        <button class="md:col-span-4 px-3 py-2 rounded-lg bg-indigo-600 text-white disabled:opacity-50" id="addBtn" disabled>Add</button>
-      </form>
-      <p id="formMsg" class="text-sm mt-2"></p>
-    </section>
+  <!-- Your existing UI goes inside #appRoot -->
+  <div id="appRoot" class="hidden">
+ 
 
-    <section class="mt-6 p-4 bg-white rounded-2xl shadow">
-      <div class="flex items-center justify-between mb-3">
-        <h2 class="font-semibold">Last rows</h2>
-        <button id="refreshBtn" class="px-3 py-1.5 rounded-lg bg-gray-100">Refresh</button>
+  <!-- MAIN CONTAINER -->
+  <div class="w-full max-w-sm mx-auto bg-white rounded-3xl shadow-lg mt-4 pb-24 relative">
+
+    <!-- HEADER + חודש -->
+    <div class="flex justify-between items-center px-4 pt-5 mb-1">
+      <button onclick="prevMonth()" class="p-2 rounded-full bg-gray-100 text-2xl">&#8592;</button>
+      <div class="text-center flex-1">
+        <div id="month-title" class="text-lg font-bold tracking-widest"></div>
       </div>
-      <div class="overflow-auto">
-        <table class="min-w-full text-sm">
-          <thead>
-            <tr class="text-left border-b">
-              <th class="py-2 pr-4">Date</th>
-              <th class="py-2 pr-4">Category</th>
-              <th class="py-2 pr-4">Amount</th>
-              <th class="py-2 pr-4">Note</th>
-            </tr>
-          </thead>
-          <tbody id="rows"></tbody>
-        </table>
+      <button onclick="nextMonth()" class="p-2 rounded-full bg-gray-100 text-2xl">&#8594;</button>
+    </div>
+
+    <!-- SUMMARY SECTION -->
+    <div class="flex justify-between px-6 mt-3 text-sm">
+      <div class="flex flex-col items-center">
+        <span class="text-gray-400">Income</span>
+        <span class="text-green-600 font-bold text-lg" id="income-summary">₪ 0</span>
       </div>
-    </section>
+      <div class="flex flex-col items-center">
+        <span class="text-gray-400">Expense</span>
+        <span class="text-red-500 font-bold text-lg" id="expense-summary">₪ 0</span>
+      </div>
+    </div>
+
+    <!-- DONUT CHART -->
+    <div class="flex justify-center items-center relative w-full my-2" style="height: 140px;">
+      <canvas id="circle-chart" width="160" height="160" class="z-0"></canvas>
+      <div class="absolute inset-0 flex flex-col items-center justify-center z-10 pointer-events-none">
+        <span id="safe-to-spend" class="font-bold text-lg text-gray-800">₪ 0</span>
+        <div class="text-xs text-gray-400 font-medium">נשאר להוציא</div>
+        <div class="text-xs text-gray-400 mt-1" id="days-left">עוד 30 ימים</div>
+      </div>
+    </div>
+
+   <!-- MONTH LIST BUTTON (replaces Recent Transactions) -->
+<div class="px-4 mt-6">
+  <button onclick="showList()" id="open-list-btn"
+          class="w-full py-3 rounded-xl bg-gray-100 hover:bg-gray-200 font-semibold">
+    כל ההכנסות וההוצאות לחודש
+  </button>
+</div>
+<!-- מסך רשימת כל התנועות לחודש -->
+<div id="screen-list" class="fixed inset-0 bg-white z-40 flex flex-col" style="display:none;">
+  <div class="p-4 border-b flex items-center justify-between">
+    <div class="font-bold" id="list-title">תנועות</div>
+    <button class="text-blue-600" onclick="hideList()">סגור</button>
+  </div>
+  <div class="p-4 overflow-auto flex-1">
+    <ul id="list-transactions" class="space-y-2"></ul>
+  </div>
+</div>
+
+
+    <!-- FLOATING ACTION BUTTON -->
+    <button onclick="showScreen('add')" class="fixed bottom-8 left-1/2 -translate-x-1/2 bg-blue-500 text-white rounded-full shadow-lg w-16 h-16 flex items-center justify-center text-3xl hover:bg-blue-600 transition-all z-30 border-4 border-white">
+      +
+    </button>
   </div>
 
-  <script type="module">
-    // --- 1) FILL THESE IN ----------------------------------------------------
+  <!-- דף הוספה -->
+  <div id="screen-add" class="fixed inset-0 bg-white z-40 flex flex-col items-center justify-center" style="display:none;">
+    <form id="expense-form" class="w-full max-w-xs p-6 rounded-2xl shadow bg-white flex flex-col gap-3">
+      <h2 class="text-lg font-bold mb-2 text-center">הוסף הוצאה/הכנסה</h2>
+      <!-- TOGGLE -->
+      <div class="flex items-center justify-center gap-0 mb-2">
+        <button type="button" id="btn-expense" class="toggle-type px-5 py-2 rounded-l-xl font-bold bg-blue-100 text-blue-700 border border-blue-200">הוצאה</button>
+        <button type="button" id="btn-income" class="toggle-type px-5 py-2 rounded-r-xl font-bold bg-gray-100 text-gray-400 border border-blue-200">הכנסה</button>
+        <input type="hidden" name="type" id="type" value="expense">
+      </div>
+      <!-- CATEGORIES -->
+      <div id="category-picker" class="grid grid-cols-4 gap-2 mb-3">
+        <button type="button" class="cat-btn flex flex-col items-center p-2 rounded-xl border bg-gray-50 hover:bg-green-100" data-category="דלק">
+          <span>⛽</span><span class="text-xs mt-1">דלק</span>
+        </button>
+        <button type="button" class="cat-btn flex flex-col items-center p-2 rounded-xl border bg-gray-50 hover:bg-green-100" data-category="רכב">
+          <span>🚗</span><span class="text-xs mt-1">רכב</span>
+        </button>
+        <button type="button" class="cat-btn flex flex-col items-center p-2 rounded-xl border bg-gray-50 hover:bg-green-100" data-category="בית">
+          <span>🏠</span><span class="text-xs mt-1">בית</span>
+        </button>
+        <button type="button" class="cat-btn flex flex-col items-center p-2 rounded-xl border bg-gray-50 hover:bg-green-100" data-category="סופר">
+          <span>🛒</span><span class="text-xs mt-1">סופר</span>
+        </button>
+        <button type="button" class="cat-btn flex flex-col items-center p-2 rounded-xl border bg-gray-50 hover:bg-green-100" data-category="חשמל">
+          <span>💡</span><span class="text-xs mt-1">חשמל</span>
+        </button>
+        <button type="button" class="cat-btn flex flex-col items-center p-2 rounded-xl border bg-gray-50 hover:bg-green-100" data-category="בתי ספר">
+          <span>🏫</span><span class="text-xs mt-1">בתי ספר</span>
+        </button>
+        <button type="button" class="cat-btn flex flex-col items-center p-2 rounded-xl border bg-gray-50 hover:bg-green-100" data-category="חוגים">
+          <span>🎵</span><span class="text-xs mt-1">חוגים</span>
+        </button>
+        <button type="button" class="cat-btn flex flex-col items-center p-2 rounded-xl border bg-gray-50 hover:bg-green-100" data-category="שטויות">
+          <span>🎁</span><span class="text-xs mt-1">שטויות</span>
+        </button>
+        <button type="button" class="cat-btn flex flex-col items-center p-2 rounded-xl border bg-gray-50 hover:bg-green-100" data-category="מסעדות">
+          <span>🍔</span><span class="text-xs mt-1">מסעדות</span>
+        </button>
+        <button type="button" class="cat-btn flex flex-col items-center p-2 rounded-xl border bg-gray-50 hover:bg-green-100" data-category="בגדים">
+          <span>👕</span><span class="text-xs mt-1">בגדים</span>
+        </button>
+        <button type="button" class="cat-btn flex flex-col items-center p-2 rounded-xl border bg-gray-50 hover:bg-green-100" data-category="שונות">
+          <span>✨</span><span class="text-xs mt-1">שונות</span>
+        </button>
+        <button type="button" class="cat-btn flex flex-col items-center p-2 rounded-xl border bg-gray-50 hover:bg-green-100" data-category="כספומט">
+          <span>🏧</span><span class="text-xs mt-1">כספומט</span>
+        </button>
+        <button type="button" class="cat-btn flex flex-col items-center p-2 rounded-xl border bg-gray-50 hover:bg-green-100" data-category="ביטוח">
+          <span>🛡️</span><span class="text-xs mt-1">ביטוח</span>
+        </button>
+        <button type="button" class="cat-btn flex flex-col items-center p-2 rounded-xl border bg-gray-50 hover:bg-green-100" data-category="חיות">
+          <span>🐶</span><span class="text-xs mt-1">חיות</span>
+        </button>
+        <button type="button" class="cat-btn flex flex-col items-center p-2 rounded-xl border bg-gray-50 hover:bg-green-100" data-category="תרבות">
+          <span>🎭</span><span class="text-xs mt-1">תרבות</span>
+        </button>
+      </div>
+        <!-- סוג הוצאה -->
+<div class="mt-1">
+  <div class="text-sm font-semibold mb-1">סוג הוצאה</div>
+  <div class="flex gap-2">
+    <button type="button" class="mode-btn px-3 py-2 rounded-xl bg-blue-100 text-blue-700 border border-blue-200" data-mode="one_time">חד פעמית</button>
+    <button type="button" class="mode-btn px-3 py-2 rounded-xl bg-gray-100 text-gray-400 border border-blue-200" data-mode="fixed">קבועה</button>
+    <button type="button" class="mode-btn px-3 py-2 rounded-xl bg-gray-100 text-gray-400 border border-blue-200" data-mode="installments">תשלומים</button>
+  </div>
+</div>
 
- const firebaseConfig = {
-  apiKey: "AIzaSyA_rKhkJPKahgGSQUMNQX8FOFABFf5hF3I",
-  authDomain: "simple-expense-app-c7473.firebaseapp.com",
-  projectId: "simple-expense-app-c7473",
-  storageBucket: "simple-expense-app-c7473.firebasestorage.app",
-  messagingSenderId: "740093062071",
-  appId: "1:740093062071:web:6693d39eab5be8293d9632"
-};
-    const SPREADSHEET_ID = "1hMp7zEbOavV7JCtBQQZtloSEpArigxMWqQXNThU9zhs"; // e.g. 1AbCdEf... from the URL
-    const SHEET_NAME = "Expenses"; // create a tab with this name and headers in row 1
-    // -------------------------------------------------------------------------
+<!-- שדות תשלומים (מופיעים רק כשנבחר "תשלומים") -->
+<div id="installments-fields" class="grid grid-cols-2 gap-2 mt-2 hidden">
+  <input type="number" id="installments_total" class="border rounded p-2" placeholder="סה״כ תשלומים" min="1">
+  <input type="number" id="installments_left" class="border rounded p-2" placeholder="תשלומים נשארו" min="0">
+</div>
 
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-app.js";
-    import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut, GoogleAuthProvider as GAP } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-auth.js";
+<input type="hidden" id="expense_mode" value="one_time">
+      <input type="hidden" name="category" id="category" required>
+      <input type="date" id="date" class="border rounded p-2" required>
+     <input type="number" id="amount"
+       class="border rounded p-2"
+       placeholder="Amount" required
+       step="0.01" inputmode="decimal" min="0" />
 
-    const app = initializeApp(firebaseConfig);
-    const auth = getAuth(app);
+      <input type="text" id="desc" class="border rounded p-2" placeholder="Description" required>
+      <button class="bg-blue-500 text-white rounded py-2 hover:bg-blue-600" type="submit">Save</button>
+      <button type="button" class="text-gray-500 underline" onclick="hideAddScreen()">Cancel</button>
+    </form>
+  </div>
 
-    // Ask for Google Sheets scope so we can call the Sheets REST API directly
-    const provider = new GoogleAuthProvider();
-    provider.addScope("https://www.googleapis.com/auth/spreadsheets");
-    provider.setCustomParameters({ prompt: "select_account" });
 
-    const ui = {
-      btnGoogle: document.getElementById('btnGoogle'),
-      btnLogout: document.getElementById('btnLogout'),
-      whoami: document.getElementById('whoami'),
-      form: document.getElementById('expenseForm'),
-      date: document.getElementById('date'),
-      category: document.getElementById('category'),
-      amount: document.getElementById('amount'),
-      note: document.getElementById('note'),
-      addBtn: document.getElementById('addBtn'),
-      formMsg: document.getElementById('formMsg'),
-      rows: document.getElementById('rows'),
-      refreshBtn: document.getElementById('refreshBtn'),
-      app: document.getElementById('app'),
-      signinView: document.getElementById('signinView'),
-      };
+  <!-- Loader Overlay -->
+  
+<div id="loader-overlay"
+     class="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50"
+     style="display: none;">
+  <div class="flex flex-col items-center">
+    <div class="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+    <div id="loader-message" class="mt-3 text-white text-sm px-4 text-center"></div>
+  </div>
+</div>
 
-    // Fill date default
-    ui.date.valueAsDate = new Date();
 
-    let accessToken = null; // Google OAuth access token (Sheets scope)
+  <!-- כפתור ניווט קטן למסך הילדים -->
+<button onclick="showScreen('kids')"
+  class="fixed bottom-24 right-6 bg-amber-500 text-white rounded-full shadow px-4 py-2 z-30">
+  💰 ילדים
+</button>
 
-    ui.btnGoogle.addEventListener('click', async () => {
-      try {
-        if (!auth.currentUser) {
-          const result = await signInWithPopup(auth, provider);
-          const cred = GAP.credentialFromResult(result);
-          accessToken = cred?.accessToken || null;
-        } else if (!accessToken) {
-          const result = await signInWithPopup(auth, provider);
-          const cred = GAP.credentialFromResult(result);
-          accessToken = cred?.accessToken || null;
-        }
-        updateHeader(auth.currentUser);
-        if (accessToken) {
-          ui.addBtn.disabled = false;
-          await loadRows();
-        }
-      } catch (err) {
-        console.error(err);
-        alert(err.message || 'Sign-in failed');
-      }
-    });
+<!-- מסך ילדים -->
+<div id="screen-kids" class="fixed inset-0 bg-white z-40 p-4 overflow-y-auto" style="display:none;">
+  <div class="flex justify-between items-center mb-3">
+    <h2 class="text-lg font-bold">קופת ילדים</h2>
+    <button class="text-blue-600 underline" onclick="hideKidsScreen()">סגור</button>
+  </div>
 
-    ui.btnLogout.addEventListener('click', async () => {
-      await signOut(auth);
-    });
+  <div id="kids-grid" class="grid grid-cols-2 gap-3 mb-5">
+    <!-- כרטיסי ילדים יוזרקו כאן -->
+  </div>
 
-    function updateHeader(user){
-      if (!user) {
-        ui.btnLogout.classList.add('hidden');
-        ui.whoami.textContent = '';
-      } else {
-        ui.btnLogout.classList.remove('hidden');
-        ui.whoami.textContent = user.email || user.displayName || 'Signed in';
-      }
-    }
+  <div>
+    <h3 class="font-semibold mb-2">יומן אחרון</h3>
+    <ul id="kids-log" class="space-y-2"></ul>
+  </div>
+</div>
+<!-- Kids Adjust Modal -->
+<div id="kids-modal"
+     class="fixed inset-0 z-50 hidden">
+  <!-- רקע כהה -->
+  <div class="absolute inset-0 bg-black/40" onclick="closeKidsModal()"></div>
 
-    onAuthStateChanged(auth, async (user) => {
-      updateHeader(user);
-      if (user) {
-        // show app, hide sign-in
-        ui.signinView.classList.add('hidden');
-        ui.app.classList.remove('hidden');
-        ui.addBtn.disabled = !accessToken;
-        await loadRows();
-      } else {
-        // show sign-in, hide app
-        ui.app.classList.add('hidden');
-        ui.signinView.classList.remove('hidden');
-        accessToken = null;
-        ui.addBtn.disabled = true;
-        ui.rows.innerHTML = '';
-      }
-    });
+  <!-- כרטיס תחתון (bottom sheet) -->
+  <div class="absolute bottom-0 left-0 right-0 bg-white rounded-t-3xl p-4 shadow-lg">
+    <div class="flex items-center justify-between mb-2">
+      <div class="font-bold text-lg">
+        עדכון קופה — <span id="kids-modal-name" class="text-blue-600"></span>
+      </div>
+      <button class="text-gray-400" onclick="closeKidsModal()">✕</button>
+    </div>
 
-    ui.form.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      if (!accessToken) return alert('Please sign in again');
-      ui.addBtn.disabled = true;
-      ui.formMsg.textContent = 'Saving...';
-      try {
-        await appendRow([
-          ui.date.value,
-          ui.category.value,
-          Number(ui.amount.value),
-          ui.note.value
-        ]);
-        ui.form.reset();
-        ui.date.valueAsDate = new Date();
-        await loadRows();
-        ui.formMsg.textContent = '✔ Saved';
-      } catch (err) {
-        console.error(err);
-        ui.formMsg.textContent = '❌ ' + (err.message || 'Failed to save');
-      } finally {
-        ui.addBtn.disabled = false;
-        setTimeout(() => ui.formMsg.textContent = '', 2500);
-      }
-    });
+    <!-- טוגל הוספה/הורדה -->
+    <div class="flex justify-center gap-0 mb-3">
+      <button type="button" id="kids-mode-add"
+              class="px-5 py-2 rounded-l-xl font-bold bg-green-100 text-green-700 border border-green-200">
+        הוספה
+      </button>
+      <button type="button" id="kids-mode-sub"
+              class="px-5 py-2 rounded-r-xl font-bold bg-gray-100 text-gray-400 border border-green-200">
+        הורדה
+      </button>
+    </div>
 
-    ui.refreshBtn.addEventListener('click', loadRows);
+    <!-- טופס -->
+    <div class="space-y-2">
+      <div>
+        <label class="text-sm text-gray-600">סכום (₪)</label>
+        <input id="kids-amount" type="number" min="1" step="1"
+               class="w-full border rounded-xl px-3 py-2" placeholder="לדוגמה: 50">
+      </div>
+      <div>
+        <label class="text-sm text-gray-600">הערה (לא חובה)</label>
+        <input id="kids-note" type="text"
+               class="w-full border rounded-xl px-3 py-2" placeholder="לדוגמה: דמי כיס / קנית צעצוע">
+      </div>
+    </div>
 
-    async function appendRow(values) {
-      const range = encodeURIComponent(`${SHEET_NAME}!A:D`);
-      const url = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${range}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`;
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ values: [values] })
-      });
-      if (!res.ok) throw new Error(await res.text());
-    }
+    <!-- כפתורים -->
+    <div class="flex gap-2 mt-4">
+      <button class="flex-1 bg-gray-100 rounded-xl py-2" onclick="closeKidsModal()">ביטול</button>
+      <button class="flex-1 bg-blue-600 text-white rounded-xl py-2" onclick="submitKidsAdjust()">שמור</button>
+    </div>
+  </div>
+</div>
 
-    async function getRows() {
-      const range = encodeURIComponent(`${SHEET_NAME}!A:D`);
-      const url = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${range}`;
-      const res = await fetch(url, { headers: { 'Authorization': `Bearer ${accessToken}` } });
-      if (res.status === 401) throw new Error('Unauthorized. Sign in again.');
-      const data = await res.json();
-      return data.values || [];
-    }
+  </div>
 
-    async function loadRows() {
-      if (!accessToken) { ui.rows.innerHTML = ''; return; }
-      ui.rows.innerHTML = '<tr><td class="py-2" colspan="4">Loading...</td></tr>';
-      try {
-        const values = await getRows();
-        // If you have headers in row 1, skip them
-        const rows = (values[0] && values[0][0] === 'Date') ? values.slice(1) : values;
-        ui.rows.innerHTML = rows.slice(-20).reverse().map(r => `
-          <tr class="border-b last:border-b-0">
-            <td class="py-2 pr-4">${r[0] || ''}</td>
-            <td class="py-2 pr-4">${r[1] || ''}</td>
-            <td class="py-2 pr-4">${r[2] || ''}</td>
-            <td class="py-2 pr-4">${r[3] || ''}</td>
-          </tr>
-        `).join('');
-      } catch (e) {
-        console.error(e);
-        ui.rows.innerHTML = `<tr><td class="py-2 text-red-600" colspan="4">${e.message || 'Failed to load rows'}</td></tr>`;
-      }
-    }
-  </script>
+  <script type="module" src="./js/config.js"></script>
+  <script type="module" src="./js/auth.js"></script>
+  <script type="module" src="./js/sheets.js"></script>
+  <script type="module" src="./js/app-bridge.js"></script>
+<script type="module" src="./js/old.js"></script>
 
-  <!-- Quick help:
-    1) Create a spreadsheet with a sheet named "Expenses" and headers in row 1: Date | Category | Amount | Note
-    2) In Firebase Console: enable Google provider and add scope https://www.googleapis.com/auth/spreadsheets
-    3) In Google Cloud Console for the same project: ENABLE the Google Sheets API
-    4) Fill firebaseConfig, SPREADSHEET_ID above (from the sheet URL)
-    5) Open this file with a local web server (or any static host) and sign in.
-  -->
+  <!-- Then load your existing app JS (convert to module if you use imports) -->
+  <!-- <script type="module" src="./js/your-existing-app.js"></script> -->
 </body>
 </html>
