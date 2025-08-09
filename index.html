@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Simple Expenses — Firebase + Google Sheets</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 min-h-screen text-gray-800">
+  <section id="signinView" class="min-h-screen grid place-items-center">
+    <div class="bg-white rounded-2xl shadow p-6 text-center">
+      <h1 class="text-xl font-bold mb-1">Simple Expenses</h1>
+      <p class="text-sm text-gray-600 mb-4">Sign in with Google to continue</p>
+      <button id="btnGoogle" class="px-4 py-2 rounded-lg bg-black text-white text-sm">Sign in with Google</button>
+    </div>
+  </section>
+  <div id="app" class="max-w-2xl mx-auto p-4 hidden">
+    <header class="flex items-center justify-between">
+      <h1 class="text-2xl font-bold">Simple Expenses</h1>
+      <div class="flex items-center gap-2">
+        <span id="whoami" class="text-sm text-gray-600"></span>
+        <button id="btnLogout" class="px-3 py-1.5 rounded-lg bg-gray-200 text-sm hidden">Sign out</button>
+      </div>
+    </header>
+
+    <section class="mt-6 p-4 bg-white rounded-2xl shadow">
+      <h2 class="font-semibold mb-3">Add expense</h2>
+      <form id="expenseForm" class="grid grid-cols-1 md:grid-cols-4 gap-3">
+        <input id="date" type="date" class="border rounded-lg p-2" required />
+        <input id="category" type="text" placeholder="Category" class="border rounded-lg p-2" required />
+        <input id="amount" type="number" step="0.01" placeholder="Amount" class="border rounded-lg p-2" required />
+        <input id="note" type="text" placeholder="Note" class="border rounded-lg p-2" />
+        <button class="md:col-span-4 px-3 py-2 rounded-lg bg-indigo-600 text-white disabled:opacity-50" id="addBtn" disabled>Add</button>
+      </form>
+      <p id="formMsg" class="text-sm mt-2"></p>
+    </section>
+
+    <section class="mt-6 p-4 bg-white rounded-2xl shadow">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="font-semibold">Last rows</h2>
+        <button id="refreshBtn" class="px-3 py-1.5 rounded-lg bg-gray-100">Refresh</button>
+      </div>
+      <div class="overflow-auto">
+        <table class="min-w-full text-sm">
+          <thead>
+            <tr class="text-left border-b">
+              <th class="py-2 pr-4">Date</th>
+              <th class="py-2 pr-4">Category</th>
+              <th class="py-2 pr-4">Amount</th>
+              <th class="py-2 pr-4">Note</th>
+            </tr>
+          </thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <script type="module">
+    // --- 1) FILL THESE IN ----------------------------------------------------
+
+ const firebaseConfig = {
+  apiKey: "AIzaSyA_rKhkJPKahgGSQUMNQX8FOFABFf5hF3I",
+  authDomain: "simple-expense-app-c7473.firebaseapp.com",
+  projectId: "simple-expense-app-c7473",
+  storageBucket: "simple-expense-app-c7473.firebasestorage.app",
+  messagingSenderId: "740093062071",
+  appId: "1:740093062071:web:6693d39eab5be8293d9632"
+};
+    const SPREADSHEET_ID = "1hMp7zEbOavV7JCtBQQZtloSEpArigxMWqQXNThU9zhs"; // e.g. 1AbCdEf... from the URL
+    const SHEET_NAME = "Expenses"; // create a tab with this name and headers in row 1
+    // -------------------------------------------------------------------------
+
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-app.js";
+    import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut, GoogleAuthProvider as GAP } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-auth.js";
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+
+    // Ask for Google Sheets scope so we can call the Sheets REST API directly
+    const provider = new GoogleAuthProvider();
+    provider.addScope("https://www.googleapis.com/auth/spreadsheets");
+    provider.setCustomParameters({ prompt: "select_account" });
+
+    const ui = {
+      btnGoogle: document.getElementById('btnGoogle'),
+      btnLogout: document.getElementById('btnLogout'),
+      whoami: document.getElementById('whoami'),
+      form: document.getElementById('expenseForm'),
+      date: document.getElementById('date'),
+      category: document.getElementById('category'),
+      amount: document.getElementById('amount'),
+      note: document.getElementById('note'),
+      addBtn: document.getElementById('addBtn'),
+      formMsg: document.getElementById('formMsg'),
+      rows: document.getElementById('rows'),
+      refreshBtn: document.getElementById('refreshBtn'),
+      app: document.getElementById('app'),
+      signinView: document.getElementById('signinView'),
+      };
+
+    // Fill date default
+    ui.date.valueAsDate = new Date();
+
+    let accessToken = null; // Google OAuth access token (Sheets scope)
+
+    ui.btnGoogle.addEventListener('click', async () => {
+      try {
+        if (!auth.currentUser) {
+          const result = await signInWithPopup(auth, provider);
+          const cred = GAP.credentialFromResult(result);
+          accessToken = cred?.accessToken || null;
+        } else if (!accessToken) {
+          const result = await signInWithPopup(auth, provider);
+          const cred = GAP.credentialFromResult(result);
+          accessToken = cred?.accessToken || null;
+        }
+        updateHeader(auth.currentUser);
+        if (accessToken) {
+          ui.addBtn.disabled = false;
+          await loadRows();
+        }
+      } catch (err) {
+        console.error(err);
+        alert(err.message || 'Sign-in failed');
+      }
+    });
+
+    ui.btnLogout.addEventListener('click', async () => {
+      await signOut(auth);
+    });
+
+    function updateHeader(user){
+      if (!user) {
+        ui.btnLogout.classList.add('hidden');
+        ui.whoami.textContent = '';
+      } else {
+        ui.btnLogout.classList.remove('hidden');
+        ui.whoami.textContent = user.email || user.displayName || 'Signed in';
+      }
+    }
+
+    onAuthStateChanged(auth, async (user) => {
+      updateHeader(user);
+      if (user) {
+        // show app, hide sign-in
+        ui.signinView.classList.add('hidden');
+        ui.app.classList.remove('hidden');
+        ui.addBtn.disabled = !accessToken;
+        await loadRows();
+      } else {
+        // show sign-in, hide app
+        ui.app.classList.add('hidden');
+        ui.signinView.classList.remove('hidden');
+        accessToken = null;
+        ui.addBtn.disabled = true;
+        ui.rows.innerHTML = '';
+      }
+    });
+
+    ui.form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (!accessToken) return alert('Please sign in again');
+      ui.addBtn.disabled = true;
+      ui.formMsg.textContent = 'Saving...';
+      try {
+        await appendRow([
+          ui.date.value,
+          ui.category.value,
+          Number(ui.amount.value),
+          ui.note.value
+        ]);
+        ui.form.reset();
+        ui.date.valueAsDate = new Date();
+        await loadRows();
+        ui.formMsg.textContent = '✔ Saved';
+      } catch (err) {
+        console.error(err);
+        ui.formMsg.textContent = '❌ ' + (err.message || 'Failed to save');
+      } finally {
+        ui.addBtn.disabled = false;
+        setTimeout(() => ui.formMsg.textContent = '', 2500);
+      }
+    });
+
+    ui.refreshBtn.addEventListener('click', loadRows);
+
+    async function appendRow(values) {
+      const range = encodeURIComponent(`${SHEET_NAME}!A:D`);
+      const url = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${range}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ values: [values] })
+      });
+      if (!res.ok) throw new Error(await res.text());
+    }
+
+    async function getRows() {
+      const range = encodeURIComponent(`${SHEET_NAME}!A:D`);
+      const url = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${range}`;
+      const res = await fetch(url, { headers: { 'Authorization': `Bearer ${accessToken}` } });
+      if (res.status === 401) throw new Error('Unauthorized. Sign in again.');
+      const data = await res.json();
+      return data.values || [];
+    }
+
+    async function loadRows() {
+      if (!accessToken) { ui.rows.innerHTML = ''; return; }
+      ui.rows.innerHTML = '<tr><td class="py-2" colspan="4">Loading...</td></tr>';
+      try {
+        const values = await getRows();
+        // If you have headers in row 1, skip them
+        const rows = (values[0] && values[0][0] === 'Date') ? values.slice(1) : values;
+        ui.rows.innerHTML = rows.slice(-20).reverse().map(r => `
+          <tr class="border-b last:border-b-0">
+            <td class="py-2 pr-4">${r[0] || ''}</td>
+            <td class="py-2 pr-4">${r[1] || ''}</td>
+            <td class="py-2 pr-4">${r[2] || ''}</td>
+            <td class="py-2 pr-4">${r[3] || ''}</td>
+          </tr>
+        `).join('');
+      } catch (e) {
+        console.error(e);
+        ui.rows.innerHTML = `<tr><td class="py-2 text-red-600" colspan="4">${e.message || 'Failed to load rows'}</td></tr>`;
+      }
+    }
+  </script>
+
+  <!-- Quick help:
+    1) Create a spreadsheet with a sheet named "Expenses" and headers in row 1: Date | Category | Amount | Note
+    2) In Firebase Console: enable Google provider and add scope https://www.googleapis.com/auth/spreadsheets
+    3) In Google Cloud Console for the same project: ENABLE the Google Sheets API
+    4) Fill firebaseConfig, SPREADSHEET_ID above (from the sheet URL)
+    5) Open this file with a local web server (or any static host) and sign in.
+  -->
+</body>
+</html>
